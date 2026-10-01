@@ -25,7 +25,7 @@ class TuyaClient:
         """Tuya API signature generate করা (HMAC-SHA256, SHA-256 content hash, hex uppercase)"""
         timestamp = str(int(time.time() * 1000))
 
-        # Content-SHA256 (Tuya SHA-256 চায়, MD5 না!)
+        # Content-SHA256
         if body and body != "":
             if isinstance(body, dict):
                 body_str = json.dumps(body, separators=(',', ':'), ensure_ascii=False)
@@ -39,10 +39,8 @@ class TuyaClient:
         if not url_path.startswith("/"):
             url_path = "/" + url_path
 
-        # sign_str = Method\nContent-SHA256\nHeaders\nUrl  (Headers এখানে খালি)
         sign_str = method.upper() + "\n" + content_hash + "\n\n" + url_path
 
-        # sign = HMAC-SHA256(secret, client_id + access_token + t + sign_str) -> HEX UPPERCASE
         sign = hmac.new(
             self.client_secret.encode('utf-8'),
             (self.client_id + access_token + timestamp + sign_str).encode('utf-8'),
@@ -77,8 +75,13 @@ class TuyaClient:
             if data.get("success"):
                 result = data["result"]
                 self.access_token = result["access_token"]
-                self.token_expire_time = time.time() + result.get("expire_time", 7200) - 300
-                print(f"[Tuya] ✅ Token acquired. Expires in {result.get('expire_time', 7200)}s")
+                
+                # --- Token Expiration Fix ---
+                expire_in = result.get("expire_time", 7200)
+                buffer_time = 300 if expire_in > 600 else 10  # সময় কম থাকলে বাফার ১০ সেকেন্ড
+                self.token_expire_time = time.time() + expire_in - buffer_time
+                
+                print(f"[Tuya] ✅ Token acquired. Expires in {expire_in}s")
                 return self.access_token
             else:
                 print(f"[Tuya] ❌ Token error: {data}")
@@ -180,15 +183,12 @@ class TuyaClient:
             value = item.get("value", 0)
 
             # Tuya smart breaker common DPs (Data Points)
-            # Different devices may use different codes - checking multiple variants
             if code in ["cur_current", "current", "phase_a_current", "total_current"]:
-                # Values are often in mA
                 if value > 1000:
                     data["current"] = value / 1000.0
                 else:
                     data["current"] = float(value)
             elif code in ["cur_voltage", "voltage", "phase_a_voltage", "total_voltage"]:
-                # Values may be in V/10 or raw V
                 if value > 1000:
                     data["voltage"] = value / 10.0
                 else:
@@ -218,17 +218,13 @@ class TuyaClient:
         print(f"Device ID: {self.device_id}")
         print(f"Access ID: {self.client_id[:10]}...")
 
-        # Test 1: Token
         print("\n[1/3] Getting access token...")
         token = self.get_token()
         if not token:
             print("❌ FAILED: Could not get token")
-            print("   - Check Access ID and Secret")
-            print("   - Check endpoint URL")
             return False
         print("✅ Token acquired successfully")
 
-        # Test 2: Device Info
         print("\n[2/3] Getting device info...")
         info = self.get_device_info()
         if info and info.get("success"):
@@ -237,11 +233,9 @@ class TuyaClient:
             print(f"   Name: {dev.get('name', 'N/A')}")
             print(f"   Model: {dev.get('model', 'N/A')}")
             print(f"   Online: {dev.get('online', False)}")
-            print(f"   IP: {dev.get('ip', 'N/A')}")
         else:
             print(f"⚠️ Device info: {info}")
 
-        # Test 3: Device Status
         print("\n[3/3] Getting device status...")
         status = self.get_device_status()
         if status and status.get("success"):
@@ -251,16 +245,13 @@ class TuyaClient:
                 print(f"   Voltage: {parsed['voltage']} V")
                 print(f"   Current: {parsed['current']} A")
                 print(f"   Power: {parsed['power']} W")
-                print(f"   Switch: {'ON' if parsed['switch_on'] else 'OFF'}")
             else:
                 print("⚠️ Status received but could not parse power data")
-                print(f"   Raw: {json.dumps(status, indent=2)[:500]}")
         else:
             print(f"❌ Status failed: {status}")
 
         print("\n" + "=" * 60)
         return True
-
 
 if __name__ == "__main__":
     client = TuyaClient()
