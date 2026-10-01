@@ -1,0 +1,21 @@
+# Smart Electricity Monitor - Python Dependencies
+# ইনস্টল করতে: pip install -r requirements.txt
+
+# Web Framework
+flask==3.0.0
+flask-socketio==5.3.6
+
+# Real-time communication
+python-socketio==5.10.0
+
+# HTTP requests
+requests==2.31.0
+
+# Task scheduling
+apscheduler==3.10.4
+
+# WSGI server (production)
+gunicorn==21.2.0
+
+# Eventlet for Socket.IO (optional, for better performance)
+eventlet==0.33.3
